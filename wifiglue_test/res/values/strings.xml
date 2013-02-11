@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="hello">Hello World, Wifiutils_testActivity!</string>
+    <string name="app_name">WifiGlue</string>
+    <string name="netname">Network Name</string>
+    <string name="netpwd">Network Password</string>
+    <string name="create">Create</string>
+    <string name="connect">Connect</string>
+    <string name="stop">Stop</string>
+    <string name="notif_title">Service Notification for User</string>
+    <string name="exit_srv">Exit Service</string>
+    <string name="test_1">Test=1</string>
+    <string name="test_2">Test=2</string>
+    <string name="test_3">Test=3</string>
+    <string name="start_srv">Start Service</string>
+    <string name="tether_title">WifiGlue Thether</string>
+    <string name="wifidirect_title">WifiGlue Direct</string>
+    <string name="discovery_title">WifiGlue Discovery</string>
+    <string name="test">Test</string>
+
+</resources>
