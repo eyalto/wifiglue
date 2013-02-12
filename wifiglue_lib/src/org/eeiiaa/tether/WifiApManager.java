@@ -156,7 +156,8 @@ public class WifiApManager extends BroadcastReceiver implements Runnable {
 
   //
   public String getWifiApBssid() {
-    return getWifiApConfiguration().BSSID;
+    WifiConfiguration cfg =getWifiApConfiguration(); 
+    return cfg.BSSID;
   }
 
   //
@@ -185,6 +186,7 @@ public class WifiApManager extends BroadcastReceiver implements Runnable {
       if (intent.hasExtra(EXTRA_PREVIOUS_WIFI_AP_STATE)) {
         prevstate = intent.getIntExtra(EXTRA_PREVIOUS_WIFI_AP_STATE, -1);
       }
+      
       Log.i(TAG, "current ap state = " + getStateString(currstate) + " previous state was " + getStateString(prevstate));
       if (currstate == WIFI_AP_STATE_ENABLED && prevstate == WIFI_AP_STATE_ENABLING) {
         notifyEnabled = true;
