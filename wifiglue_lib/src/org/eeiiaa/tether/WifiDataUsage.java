@@ -21,7 +21,7 @@ public class WifiDataUsage {
 	private static final String INTERFACE_FILE = "/proc/self/net/dev";
 	//TODO: change hard coded interface values
 	private static final String WIFI_INTERFACE_NAME = " wlan0:"; //test verizon nexus s (has 2 wlan0 and m.wlan0)
-	private static final String MOBILE_INTERFACE_NAME = "rmnet0";
+	private static final String[] MOBILE_INTERFACE_NAMES = {"rmnet0", "svnet0"};
 	
     private static final Pattern LINE_PATTERN = Pattern.compile("^" + // start
             "(.*?):" + // the device name (group = 1)
@@ -114,9 +114,14 @@ public class WifiDataUsage {
                     while ((line = in.readLine()) != null) {
                     	if (line.substring(0, WIFI_INTERFACE_NAME.length()).equals(WIFI_INTERFACE_NAME)){
                     		wlanLine=line;
+                    	} 
+                    	else {
+                    		for (String s : MOBILE_INTERFACE_NAMES) {
+                    			if (line.contains(s)) {
+                    				mobileLine = line;
+                    			}
+                    		}	
                     	}
-                    	else if (line.contains(MOBILE_INTERFACE_NAME))
-                    		mobileLine = line;
                     }
                     in.close();
                     fstream.close();
