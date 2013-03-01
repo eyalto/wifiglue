@@ -252,7 +252,9 @@ public class Wifi {
     WifiConfiguration config = null;
     if (netid == -1) {
       config = getWifiConfigurationBySsid(wifiMgr, convertToQuotedString(ssid));
-      netid = config.networkId;
+      if (config != null){
+        netid = config.networkId;
+      }
     }
     else {
       config = getWifiConfigurationByNetworkId(wifiMgr, netid);
