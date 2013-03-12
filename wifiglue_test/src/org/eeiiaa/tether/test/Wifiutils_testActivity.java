@@ -91,11 +91,11 @@ public class Wifiutils_testActivity extends Activity implements OnConnectionList
     ((Button) findViewById(R.id.forget)).setOnClickListener(new Button.OnClickListener() {
       public void onClick(View v) {
         String ssid = ((TextView) findViewById(R.id.netssid)).getText().toString();
-        con.setSsid(ssid);
-        con.setOnConnectionListener(Wifiutils_testActivity.this);
-        con.forget();
         TextView tx = (TextView) findViewById(R.id.txv);
         tx.setText("forgotting network: " + ssid);
+        con.setSsid(ssid);
+        con.setOnConnectionListener(Wifiutils_testActivity.this);
+        con.forget();        
       }
     });
 

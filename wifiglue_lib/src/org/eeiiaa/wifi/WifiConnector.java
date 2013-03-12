@@ -42,8 +42,8 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
   private long updateInterval_ = DEFAULT_UPDATE_INTERVAL;
   private boolean isRunning_ = false;
   private WifiDataUsage used_;
+  private IntentFilter filter_;
   
-
   public class ConnectionInfo {
     public WifiInfo winf;
     public DhcpInfo dhinf;
@@ -63,6 +63,7 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
 
   public interface WifiDataUsedListener {
     public void wifiDataUsed(long transmitted, long received);
+
     public void wifiDataUsedUpdate(long transmitted, long received);
   }
 
@@ -111,6 +112,10 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     mWaitingConnection = false;
     mWaitingScan = false;
     scanResultOption = sro;
+    filter_ = new IntentFilter();
+    filter_.addAction(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION);
+    filter_.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
+    
   }
 
   public void setSsid(String ssid) {
@@ -129,10 +134,10 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     return mPwd;
   }
 
-  public String getMacAddress(){
+  public String getMacAddress() {
     return mMacAddress;
   }
-  
+
   public void setOnConnectionListener(OnConnectionListener l) {
     //
     mListener = l;
@@ -155,7 +160,7 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     }
 
     mWaitingScan = true;
-    mContext.registerReceiver(this, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+    mContext.registerReceiver(this, filter_);
     boolean enabled = mWifiMgr.isWifiEnabled();
 
     if (!enabled) {
@@ -172,39 +177,52 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
   }
 
   public void forget() {
+
+    forgetting_ = true;
     
-    if (dataUpdateThread_ != null){
+    if (dataUpdateThread_ != null) {
       isRunning_ = false;
       dataUpdateThread_.interrupt();
       try {
         dataUpdateThread_.join();
       } catch (InterruptedException e) {
-        Log.w(TAG,"joining data usage update thread interrupted");
+        Log.w(TAG, "joining data usage update thread interrupted");
         e.printStackTrace();
       }
     }
+    boolean forgotOK = Wifi.disconnectFromCurrentNetwork(mNetssid, mWifiMgr, true);
+    if (forgotOK) {
+      Log.i(TAG, "forgot success previous settings were");
+      notifyForgot(forgotOK);
+    }
+    // forgetting connection state and unregister
+    if (mConnected){
+      mConnected = false;
+      mContext.unregisterReceiver(this);
+    }
     
-    forgetting_ = true;
-    scan();
+    forgetting_ = false;
   }
 
   public void connect() {
 
     mConnected = false;
+    mWaitingConnection = false;
+    
     transmitted = received = 0;
 
     // TODO: check if not already connected
     WifiInfo info = mWifiMgr.getConnectionInfo();
 
     if (info != null) {
-      String currssid = info.getSSID();
+      String currssid = unQuote(info.getSSID());
       if (currssid != null) {
         // already connected
         if (currssid.equals(mNetssid)) {
           mConnected = true;
           Log.i(TAG, "already successfully connected to: " + currssid);
           notifyConnectionListener();
-          mContext.registerReceiver(this, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
+          mContext.registerReceiver(this, filter_);
           return;
         }
       }
@@ -215,8 +233,6 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
       Log.i(TAG, "starting standard scan...");
 
       // when connection requested than register
-      mContext.registerReceiver(this, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
-
       boolean enabled = mWifiMgr.isWifiEnabled();
       if (!enabled) {
         Log.i(TAG, "enabling wifi...");
@@ -230,6 +246,7 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
         }
       }
       mConnecting = true;
+      mContext.registerReceiver(this, filter_);
       mWifiMgr.startScan();
       Log.i(TAG, "starting scan prior to connection...");
 
@@ -269,24 +286,15 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     // when forgetting a network and re-connecting to a previously configured
     // existing one
     // when connecting and need a scan to verify connection can be established
-    if (intent.getAction().equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) && (mWaitingScan || mConnecting || forgetting_)) {
+    Log.i(TAG,"action: "+intent.getAction());
+    if (intent.getAction().equals(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) && (mWaitingScan || mConnecting )) {
       // forgetting current and reconnecting to highest priority existing
       // network
 
-      Log.i(TAG, "mWaitingScan:" + mWaitingScan + " forgetting: " + forgetting_);
+      Log.i(TAG, "ACTION SCAN: mWaitingScan:" + mWaitingScan + " connecting "+mConnecting);
 
-      if (mWaitingScan && forgetting_) {
-        boolean forgotOK = Wifi.disconnectFromCurrentNetwork(mNetssid, mWifiMgr, true);
-        if (forgotOK) {
-          forgetting_ = false;
-          Log.i(TAG, "forgot success previous settings were");
-          notifyForgot(forgotOK);
-        }
-        mContext.unregisterReceiver(this);
-        mWaitingScan = false;
-      }
       // normal scan request
-      else if (mWaitingScan) {
+      if (mWaitingScan) {
         String json = new String();
         switch (scanResultOption) {
         case GET_ALL:
@@ -297,14 +305,12 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
           break;
         }
         mScanListener.scanResultsJSON(json);
-        mContext.unregisterReceiver(this);
         mWaitingScan = false;
-
+        
+        // scan is done - unregister
+        mContext.unregisterReceiver(this);
         Log.i(TAG, "processing scan results as JSON");
-
-        if (mConnected == true) {
-          mContext.registerReceiver(this, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
-        }
+        
       }
 
       if (mConnecting && !mWaitingConnection) {
@@ -312,74 +318,66 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
         ScanResult scannedNet = searchNetwork(mNetssid);
         if (scannedNet == null) {
           Log.i(TAG, "ssid not found...: " + mNetssid);
+          mConnecting = false;
+          mContext.unregisterReceiver(this);
           notifyConnectionFailed();
           return; // didn't find requested network noting to connect
         }
-        else {
-          
-        }
 
         WifiConfiguration configuredNet = searchConfiguration(scannedNet);
-        // TODO: check what happens when configuration exists but different
-        // password or settings or BSSID
         boolean result_ok = false;
-
+                
         if (configuredNet != null) {
           // configuration exits connect to a configured network
+          mWaitingConnection = true;
           result_ok = Wifi.connectToConfiguredNetwork(mContext, mWifiMgr, configuredNet, false);
           Log.i(TAG, "configuration exits connect to a configured network");
-          mWaitingConnection = true;
         }
         else {
           // configure and connect to network
+          mWaitingConnection = true;
           result_ok = Wifi.connectToNewNetwork(mContext, mWifiMgr, scannedNet, mPwd, MAX_OPEN_NETS);
           Log.i(TAG, "configure and connect to network");
-          mWaitingConnection = true;
         }
 
+        // failed to connect - unregister and notify
         if (!result_ok) {
           mContext.unregisterReceiver(this);
-
+          mWaitingConnection = false;
+          mConnecting = false;
           Log.e(TAG, "error connecting Wifi.connect returned error");
           notifyConnectionFailed();
         }
-        else {
-          mContext.unregisterReceiver(this);
-          Log.i(TAG, "connection successful and registering intent receiver for CONNECTIVITY_ACTION");
-
-          mContext.registerReceiver(this, new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION));
-        }
       }
-
     }
-    else if (intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION)) {
+    
+    else if (intent.getAction().equals(ConnectivityManager.CONNECTIVITY_ACTION) && (mConnected || (mConnecting && mWaitingConnection))) {
+      Log.i(TAG, "ACTION CONNECTIVITY: mWaitingScan:" + mWaitingScan + " forgetting: " + forgetting_ + " connecting "+mConnecting);
+
       NetworkInfo networkInfo = intent.getParcelableExtra(ConnectivityManager.EXTRA_NETWORK_INFO);
 
       if (!mConnected && networkInfo.getType() == ConnectivityManager.TYPE_WIFI && networkInfo.isConnected()) {
 
         if (mWifiMgr.getConnectionInfo().getSupplicantState() == SupplicantState.COMPLETED) {
 
-          Log.i(TAG, "getConnectionInfo: " + mWifiMgr.getConnectionInfo() + " getSSID: " + mWifiMgr.getConnectionInfo().getSSID());
-
+          Log.i(TAG, " getConnectionInfo: " + mWifiMgr.getConnectionInfo() + " getSSID: " + mWifiMgr.getConnectionInfo().getSSID());
+          String connectionSsid = unQuote(mWifiMgr.getConnectionInfo().getSSID());
           // when phone turns into AP mode, wifimgr returns null...
           // fail protection for such cases...
-          if (mWifiMgr.getConnectionInfo().getSSID() != null) {
-
-            if (mWifiMgr.getConnectionInfo().getSSID().equals(mNetssid)) {
+          if (connectionSsid != null) {
+            Log.i(TAG, "mNetssid: |"+mNetssid +"| connectionSsid |"+connectionSsid+"|");
+            if (connectionSsid.equals(mNetssid)) {
               mConnected = true;
               mConnecting = false;
               mWaitingConnection = false;
-              // when connection established than de-register
-              // mContext.unregisterReceiver(this);
               forgetting_ = false;
 
               Log.i(TAG, "VERIFIED SUCCESSFUL CONNECTION to: " + mNetssid);
-
+              // connection done notify - do not unregister to get disconnection detected
               notifyConnectionListener();
             }
           }
         }
-
       }
       else if (mConnected && networkInfo.getType() == ConnectivityManager.TYPE_WIFI && !networkInfo.isConnected()) {
 
@@ -398,13 +396,26 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
         if (!forgetting_) {
           Log.i(TAG, "network lost " + networkInfo);
           notifyNetworkLost(networkInfo);
+          mContext.unregisterReceiver(this);
+        }
+        else {
+          Log.i(TAG, "network lost when forgetting " + networkInfo);
         }
       }
-      // mContext.unregisterReceiver(this);
+      
 
       Log.i(TAG, "end of CONNECTIVITY_ACTION");
     }
 
+  }
+
+  private static final String unQuote(String str) {
+    if (str == null)
+        return null;
+    if (str.charAt(0) == '\"' && str.charAt(str.length()-1) == '\"')
+      return str.substring(1, str.length()-1);
+    else 
+      return str;
   }
 
   private void notifyConnectionListener() {
@@ -414,7 +425,7 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     ConnectionInfo info = getConnectionInfo();
     if (mListener != null)
       mListener.connectionEstablished(info);
-    
+
     dataUpdateThread_ = new Thread(this);
     isRunning_ = true;
     dataUpdateThread_.start();
@@ -428,18 +439,18 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
   }
 
   private void notifyDisconnected() {
-    
-    if (dataUpdateThread_ != null){
+
+    if (dataUpdateThread_ != null) {
       isRunning_ = false;
       dataUpdateThread_.interrupt();
       try {
         dataUpdateThread_.join();
       } catch (InterruptedException e) {
-        Log.w(TAG,"joining data usage update thread interrupted");
+        Log.w(TAG, "joining data usage update thread interrupted");
         e.printStackTrace();
       }
     }
-    
+
     if (mListener != null) {
       Log.i(TAG, "calling ui disconnected()");
       mListener.disconnected();
@@ -468,11 +479,14 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     ConnectionInfo info = new ConnectionInfo();
     WifiInfo winf = mWifiMgr.getConnectionInfo();
     info.winf = winf;
-    // added winf.getSSID() != null as it crashes when ssid field is null on winf
-    if (winf != null && winf.getSSID() != null) {
-      if (winf.getSSID().equals(mNetssid)) {
-        DhcpInfo dhinf = mWifiMgr.getDhcpInfo();
-        info.dhinf = dhinf;
+    
+    if (winf != null) {
+      if (winf.getSSID() != null) {
+        String winfSsid = unQuote(winf.getSSID());
+        if (winfSsid.equals(mNetssid)) {
+          DhcpInfo dhinf = mWifiMgr.getDhcpInfo();
+          info.dhinf = dhinf;
+        }
       }
     }
     return info;
@@ -480,8 +494,8 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
 
   @Override
   public void run() {
-   
-    while(isRunning_){
+
+    while (isRunning_) {
       if (mDataListener != null) {
         used_.updateUsageCounters();
         transmitted = used_.getWifiTransmitted();
@@ -496,9 +510,9 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
         e.printStackTrace();
       }
     }
-    
+
   }
-  
+
   private String getScannedNetworksJSON() {
 
     String jsonString = null;
@@ -605,5 +619,5 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
   private OnScanResultsListener mScanListener;
   private static final String TAG = "Wifiglue:WifiConnector";
   private int scanResultOption;
- 
+
 }
