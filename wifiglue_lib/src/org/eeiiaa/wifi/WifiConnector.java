@@ -468,7 +468,8 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
     ConnectionInfo info = new ConnectionInfo();
     WifiInfo winf = mWifiMgr.getConnectionInfo();
     info.winf = winf;
-    if (winf != null) {
+    // added winf.getSSID() != null as it crashes when ssid field is null on winf
+    if (winf != null && winf.getSSID() != null) {
       if (winf.getSSID().equals(mNetssid)) {
         DhcpInfo dhinf = mWifiMgr.getDhcpInfo();
         info.dhinf = dhinf;

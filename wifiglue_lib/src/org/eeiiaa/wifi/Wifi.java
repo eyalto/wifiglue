@@ -258,12 +258,18 @@ public class Wifi {
     }
     else {
       config = getWifiConfigurationByNetworkId(wifiMgr, netid);
+
     }
     // reduce priority
-    config.priority = 0;
-    wifiMgr.updateNetwork(config);
-    wifiMgr.saveConfiguration();
-
+    //
+    // added config != null Dan 
+    //
+    if (config != null) {
+      config.priority = 0;
+      wifiMgr.updateNetwork(config);
+      wifiMgr.saveConfiguration();
+    }
+    
     // disable current network
     if (wifiMgr.disableNetwork(netid)) {
       Log.i(TAG, "disable current network");
