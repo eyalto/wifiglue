@@ -334,7 +334,6 @@ public class WifiApManager extends BroadcastReceiver implements Runnable {
 			}
 
 			mState = getWifiApState();
-			Log.i(TAG, "wifiapstate " + getStateString(mState));
 
 			switch (mState) {
 			case WIFI_AP_STATE_ENABLED:
