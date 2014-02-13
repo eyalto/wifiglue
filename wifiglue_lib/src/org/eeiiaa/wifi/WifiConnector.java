@@ -432,7 +432,7 @@ public class WifiConnector extends BroadcastReceiver implements Runnable {
 
   }
 
-  private static final String unQuote(String str) {
+  public static final String unQuote(String str) {
     if (str == null)
         return null;
     if (str.charAt(0) == '\"' && str.charAt(str.length()-1) == '\"')
