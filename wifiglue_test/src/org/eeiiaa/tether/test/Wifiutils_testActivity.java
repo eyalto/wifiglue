@@ -228,7 +228,9 @@ public class Wifiutils_testActivity extends Activity implements OnConnectionList
   // WifiApManager callbacks
   //
   @Override
-  public void mobileApEnabled() {
+  public void mobileApEnabled(String apSsid, String pwd) {
+  	final String s = apSsid;
+  	final String p = pwd;
     runOnUiThread(new Runnable() {
       public void run() {
         // give it some time to complete dhcp
@@ -238,7 +240,7 @@ public class Wifiutils_testActivity extends Activity implements OnConnectionList
             String ipAddress = ifAddress.substring(0, ifAddress.indexOf('/'));
             String ipMask = ifAddress.substring(ifAddress.indexOf('/')+1);
             tx = (TextView) findViewById(R.id.txv);
-            tx.setText("my ip: " + ipAddress+"\n"+" mask: "+ipMask);
+            tx.setText("my ip: " + ipAddress+"\n"+"mask: "+ipMask+"\nSsid: "+s+"\npwd: "+p);
           }
         },5000);
       }
